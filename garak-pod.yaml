@@ -24,12 +24,6 @@ spec:
       echo ""
       echo "Granite 3.1 endpoint:"
       echo "  https://isvc-granite-31-8b-fp8-predictor.sandbox-shared-models.svc.cluster.local:8443/v1"
-      echo ""
-      echo "Example garak command:"
-      echo "  garak --model_type openai \\"
-      echo "    --model_name granite-3.1-8b-instruct \\"
-      echo "    --uri https://isvc-granite-31-8b-fp8-predictor.sandbox-shared-models.svc.cluster.local:8443/v1"
-      echo ""
 
       exec /bin/bash
     env:
