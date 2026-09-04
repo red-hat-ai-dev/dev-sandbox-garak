@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: granite-oauth-proxy
+  labels:
+    app: granite-proxy
+spec:
+  containers:
+  - name: proxy
+    image: registry.access.redhat.com/ubi9/python-311
+    command: ["/bin/bash", "-c"]
+    args:
+    - |
+      cat > /tmp/proxy.py <<'EOF'
+      from http.server import HTTPServer, BaseHTTPRequestHandler
+      import requests, urllib3, os, sys
+      urllib3.disable_warnings()
+
+      GRANITE = 'https://isvc-granite-31-8b-fp8-predictor.sandbox-shared-models.svc.cluster.local:8443'
+      TOKEN = os.environ.get('TOKEN', '')
+
+      class ProxyHandler(BaseHTTPRequestHandler):
+          def do_GET(self): self._proxy('GET')
+          def do_POST(self): self._proxy('POST')
+          def _proxy(self, method):
+              url = f"{GRANITE}{self.path}"
+              body = self.rfile.read(int(self.headers.get('Content-Length', 0))) if method == 'POST' else None
+              headers = {'Authorization': f'Bearer {TOKEN}', 'Content-Type': 'application/json'}
+              try:
+                  resp = requests.request(method, url, data=body, headers=headers, verify=False, timeout=120)
+                  self.send_response(resp.status_code)
+                  for k, v in resp.headers.items():
+                      if k.lower() not in ['connection', 'transfer-encoding']:
+                          self.send_header(k, v)
+                  self.end_headers()
+                  self.wfile.write(resp.content)
+              except Exception as e:
+                  self.send_response(500)
+                  self.end_headers()
+                  self.wfile.write(str(e).encode())
+          def log_message(self, fmt, *args): print(f"[PROXY] {fmt % args}")
+
+      HTTPServer(('0.0.0.0', 8000), ProxyHandler).serve_forever()
+      EOF
+
+      pip install -q requests urllib3
+      echo "Proxy starting on port 8000..."
+      exec python3 /tmp/proxy.py
+    env:
+    - name: TOKEN
+      value: "REPLACE_WITH_TOKEN"
+    ports:
+    - containerPort: 8000
+      name: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: granite-oauth-proxy
+spec:
+  selector:
+    app: granite-proxy
+  ports:
+  - protocol: TCP
+    port: 8000
+    targetPort: 8000

@@ -1,10 +1,6 @@
 #!/bin/bash
 set -e
 
-# Detect current namespace
-NAMESPACE=$(oc project -q)
-echo "Using namespace: $NAMESPACE"
-
 # Get OAuth token
 TOKEN=$(oc whoami -t)
 
@@ -14,15 +10,15 @@ sed "s/REPLACE_WITH_TOKEN/$TOKEN/" proxy-pod.yaml | oc apply -f -
 
 # Wait for proxy to be ready
 echo "Waiting for proxy pod..."
-oc wait --for=condition=Ready pod/granite-oauth-proxy --timeout=90s
+oc wait --for=condition=Ready pod/granite-oauth-proxy -n rh-ee-sbowerma-dev --timeout=90s
 
 # Patch garak to use our proxy (garak's OpenAICompatible class doesn't allow URI override)
 echo "Patching garak to use proxy..."
-oc exec garak-redteam -- bash -c "
+oc exec garak-redteam-soyr-redhat -n rh-ee-sbowerma-dev -- bash -c "
 OPENAI_PY=\$(python -c 'import garak.generators.openai; import os; print(os.path.dirname(garak.generators.openai.__file__))')/openai.py
 if ! grep -q 'granite-oauth-proxy' \$OPENAI_PY; then
   cp \$OPENAI_PY \${OPENAI_PY}.bak
-  sed -i 's|http://localhost:8000/v1/|http://granite-oauth-proxy.$NAMESPACE.svc.cluster.local:8000/v1/|g' \$OPENAI_PY
+  sed -i 's|http://localhost:8000/v1/|http://granite-oauth-proxy.rh-ee-sbowerma-dev.svc.cluster.local:8000/v1/|g' \$OPENAI_PY
   echo 'Patched garak openai.py'
 else
   echo 'Already patched'
@@ -31,7 +27,7 @@ fi
 
 # Run garak red team test
 echo "Running garak..."
-oc exec garak-redteam -- bash -c "
+oc exec garak-redteam-soyr-redhat -n rh-ee-sbowerma-dev -- bash -c "
 export OPENAICOMPATIBLE_API_KEY='dummy'
 
 python -m garak \
@@ -44,5 +40,5 @@ python -m garak \
 
 echo ""
 echo "Test complete! Retrieve results with:"
-echo "  oc exec garak-redteam -- ls -lh ~/.local/share/garak/garak_runs/"
-echo "  oc cp $NAMESPACE/garak-redteam:/opt/app-root/src/.local/share/garak/garak_runs/granite-31-redteam.report.jsonl ./granite-31-redteam.report.jsonl"
+echo "  oc exec garak-redteam-soyr-redhat -n rh-ee-sbowerma-dev -- ls -lh ~/.local/share/garak/garak_runs/"
+echo "  oc cp rh-ee-sbowerma-dev/garak-redteam-soyr-redhat:/opt/app-root/src/.local/share/garak/garak_runs/granite-31-redteam.report.jsonl ./granite-31-redteam.report.jsonl"

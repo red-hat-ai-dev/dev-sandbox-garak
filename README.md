@@ -1,66 +1,87 @@
 # Garak Red Team Testing for Granite 3.1-8B
 
+Red team testing setup for Granite 3.1-8B model using NVIDIA's garak vulnerability scanner.
+
+## Architecture
+
+```
+garak pod → OAuth proxy pod (port 8000) → Granite endpoint (with OAuth)
+```
+
+The Granite endpoint requires OAuth authentication. Garak's `OpenAICompatible` generator doesn't support custom URIs (hardcoded to `localhost:8000`), so we:
+1. Deploy an OAuth proxy that forwards requests to Granite with authentication
+2. Patch garak to use the proxy service instead of localhost
+
 ## Setup
 
-Deploy the garak pod:
+### 1. Deploy garak pod
+
 ```bash
 oc apply -f garak-pod.yaml
+oc wait --for=condition=Ready pod/garak-redteam --timeout=300s
 ```
 
-Wait for pod to be ready (takes ~2 minutes to install garak):
-```bash
-oc wait --for=condition=Ready pod/garak-redteam -n (your namespace) --timeout=300s
-```
+### 2. Run tests
 
-## Run Tests
-
-Use the provided script:
 ```bash
 ./run-garak.sh
 ```
 
-Or manually:
-```bash
-TOKEN=$(oc whoami -t)
-
-oc exec garak-redteam-soyr-redhat -n rh-ee-sbowerma-dev -- bash -c "
-export OPENAICOMPATIBLE_API_KEY='$TOKEN'
-
-python -m garak \
-  --model_type openai.OpenAICompatible \
-  --model_name granite-3.1-8b-instruct \
-  --generator_options '{\"uri\": \"https://isvc-granite-31-8b-fp8-predictor.sandbox-shared-models.svc.cluster.local:8443/v1/\"}' \
-  --probes continuation.ContinueSlursReclaimedSlurs \
-  --report_prefix granite-31-redteam \
-  --generations 5
-"
-```
+This script:
+- Detects your current namespace automatically
+- Deploys the OAuth proxy with your current token
+- Patches garak to use the proxy
+- Runs a red team test
 
 ## Available Probes
 
-List all available probes:
+List all probes:
 ```bash
-oc exec garak-redteam -n (your namespace) -- python -m garak --list_probes
+oc exec garak-redteam -- python -m garak --list_probes
 ```
 
-Common probe categories:
-- `continuation` - Harmful content continuation
-- `dan` - Jailbreak attempts
+Common categories:
+- `continuation` - Harmful content continuation (slurs, etc.)
+- `dan` - Jailbreak attempts (DAN, DUDE, etc.)
 - `encoding` - Encoding-based bypasses
 - `promptinject` - Prompt injection attacks
+- `goodside` - Riley Goodside's adversarial prompts
+- `malwaregen` - Malware generation attempts
+
+## Custom Tests
+
+Run specific probes:
+```bash
+oc exec garak-redteam -- bash -c "
+export OPENAICOMPATIBLE_API_KEY='dummy'
+python -m garak \
+  --model_type openai.OpenAICompatible \
+  --model_name isvc-granite-31-8b-fp8 \
+  --probes dan,encoding,promptinject \
+  --report_prefix custom-test \
+  --generations 10
+"
+```
 
 ## Retrieve Results
 
 ```bash
+NAMESPACE=$(oc project -q)
+
 # List reports
-oc exec garak-redteam -n (your namespace) -- ls -lh ~/.local/share/garak/garak_runs/
+oc exec garak-redteam -- ls -lh ~/.local/share/garak/garak_runs/
 
 # Copy report locally
-oc cp rh-ee-sbowerma-dev/garak-redteam-soyr-redhat:/opt/app-root/src/.local/share/garak/garak_runs/granite-31-redteam.report.jsonl ./granite-31-redteam.report.jsonl
+oc cp $NAMESPACE/garak-redteam:/opt/app-root/src/.local/share/garak/garak_runs/granite-31-redteam.report.jsonl ./report.jsonl
+
+# View HTML report
+oc exec garak-redteam -- cat ~/.local/share/garak/garak_runs/granite-31-redteam.report.html > report.html
+open report.html
 ```
 
 ## Cleanup
 
 ```bash
-oc delete pod garak-redteam -n (your namespace)
+oc delete pod garak-redteam granite-oauth-proxy
+oc delete service granite-oauth-proxy
 ```
