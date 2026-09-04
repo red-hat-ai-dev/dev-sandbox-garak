@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: garak-redteam
+  namespace: placeholder
+  labels:
+    app: garak-redteam
+spec:
+  restartPolicy: Never
+  containers:
+  - name: garak
+    image: registry.access.redhat.com/ubi9/python-311
+    command: ["/bin/bash", "-c"]
+    args:
+    - |
+      set -e
+      echo "Installing garak and dependencies..."
+      pip install --no-cache-dir garak
+
+      echo ""
+      echo "==================================="
+      echo "Garak installed successfully!"
+      echo "==================================="
+      echo ""
+      echo "Granite 3.1 endpoint:"
+      echo "  https://isvc-granite-31-8b-fp8-predictor.sandbox-shared-models.svc.cluster.local:8443/v1"
+      echo ""
+      echo "Example garak command:"
+      echo "  garak --model_type openai \\"
+      echo "    --model_name granite-3.1-8b-instruct \\"
+      echo "    --uri https://isvc-granite-31-8b-fp8-predictor.sandbox-shared-models.svc.cluster.local:8443/v1"
+      echo ""
+
+      exec /bin/bash
+    env:
+    - name: GRANITE_ENDPOINT
+      value: "https://isvc-granite-31-8b-fp8-predictor.sandbox-shared-models.svc.cluster.local:8443/v1"
+    - name: OPENAICOMPATIBLE_API_KEY
+      value: "will-be-set-at-runtime"
+    resources:
+      requests:
+        memory: "8Gi"
+        cpu: "2"
+      limits:
+        memory: "16Gi"
+        cpu: "4"
+    stdin: true
+    tty: true
