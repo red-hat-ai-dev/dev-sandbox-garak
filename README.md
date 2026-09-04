@@ -2,6 +2,8 @@
 
 Red team testing setup for Granite 3.1-8B model using NVIDIA's garak vulnerability scanner.
 
+TODO: Add link to install oc and yuhhh
+
 ## Architecture
 
 ```
