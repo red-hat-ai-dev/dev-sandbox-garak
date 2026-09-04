@@ -5,7 +5,7 @@ Red team testing setup for Granite 3.1-8B model using NVIDIA's garak vulnerabili
 ## Architecture
 
 ```
-garak pod → OAuth proxy pod (port 8000) → Granite endpoint (with OAuth)
+garak pod -> OAuth proxy pod (port 8000) -> Granite endpoint (with OAuth)
 ```
 
 The Granite endpoint requires OAuth authentication. Garak's `OpenAICompatible` generator doesn't support custom URIs (hardcoded to `localhost:8000`), so we:
